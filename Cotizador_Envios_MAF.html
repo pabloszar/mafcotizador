@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cotizador de Envíos – Mueblería MAF</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; height: 100vh; display: flex; flex-direction: column; }
+
+  /* ── Header ── */
+  .header {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    color: white; padding: 12px 24px;
+    display: flex; align-items: center; gap: 14px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.3); z-index: 1000;
+  }
+  .header-logo { font-size: 26px; font-weight: 900; letter-spacing: -1px; color: #F39C12; }
+  .header-sub { font-size: 12px; opacity: 0.7; margin-top: 1px; }
+  .header-title { font-size: 17px; font-weight: 700; }
+
+  /* ── Main ── */
+  .main { display: flex; flex: 1; overflow: hidden; }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: 360px; min-width: 320px; background: white;
+    overflow-y: auto; box-shadow: 2px 0 12px rgba(0,0,0,0.08); z-index: 500;
+    display: flex; flex-direction: column;
+  }
+  .sidebar-section { padding: 16px 20px; border-bottom: 1px solid #eee; }
+  .sidebar-section:last-child { border-bottom: none; }
+
+  label { display: block; font-size: 11px; font-weight: 700; color: #555; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; }
+
+  /* ── Search ── */
+  .search-wrap {
+    position: relative;
+  }
+  .search-input {
+    width: 100%; padding: 11px 14px 11px 38px;
+    border: 2px solid #e0e0e0; border-radius: 10px;
+    font-size: 14px; color: #222; background: #fafafa;
+    transition: border-color .2s;
+  }
+  .search-input:focus { outline: none; border-color: #1a1a2e; background: white; }
+  .search-icon {
+    position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+    font-size: 16px; opacity: 0.4; pointer-events: none;
+  }
+  .search-results {
+    position: absolute; top: 100%; left: 0; right: 0;
+    background: white; border: 1px solid #ddd; border-radius: 8px;
+    margin-top: 4px; max-height: 200px; overflow-y: auto;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.15); z-index: 900;
+    display: none;
+  }
+  .search-results.visible { display: block; }
+  .search-result-item {
+    padding: 10px 14px; cursor: pointer; font-size: 13px;
+    border-bottom: 1px solid #f0f0f0; transition: background .1s;
+  }
+  .search-result-item:hover { background: #f5f5f5; }
+  .search-result-item:last-child { border-bottom: none; }
+  .search-result-sub { font-size: 11px; color: #888; margin-top: 2px; }
+  .search-spinner { padding: 12px; text-align: center; font-size: 12px; color: #888; }
+
+  /* ── Destination badge ── */
+  .dest-card {
+    margin-top: 10px; padding: 12px 14px;
+    background: #f8f9fa; border-radius: 10px;
+    display: none;
+  }
+  .dest-card.visible { display: block; }
+  .dest-name { font-size: 15px; font-weight: 800; color: #1a1a2e; }
+  .dest-meta { font-size: 12px; color: #666; margin-top: 4px; line-height: 1.5; }
+  .dest-meta span { display: inline-block; margin-right: 14px; }
+  .banda-tag {
+    display: inline-block; padding: 2px 8px; border-radius: 12px;
+    font-size: 10px; font-weight: 700; color: white; margin-left: 6px;
+  }
+  .banda-1 { background: #27AE60; }
+  .banda-2 { background: #E67E22; }
+  .banda-3 { background: #C0392B; }
+
+  /* ── Quick zones ── */
+  .quick-zones { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .quick-zone {
+    padding: 5px 10px; border-radius: 20px; font-size: 11px;
+    cursor: pointer; border: 1.5px solid #ddd; background: white;
+    transition: all .15s; font-weight: 600; color: #444;
+  }
+  .quick-zone:hover { border-color: #1a1a2e; background: #f5f5f5; }
+  .quick-zone.active { background: #1a1a2e; color: white; border-color: #1a1a2e; }
+
+  /* ── Size cards ── */
+  .size-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .size-card {
+    border: 2px solid #e0e0e0; border-radius: 10px;
+    padding: 8px 6px; cursor: pointer; text-align: center;
+    transition: all .2s; background: #fafafa;
+  }
+  .size-card:hover { border-color: #1a1a2e; background: #f0f2f5; }
+  .size-card.selected { border-color: #1a1a2e; background: #1a1a2e; color: white; }
+  .size-card .size-icon { font-size: 18px; }
+  .size-card .size-name { font-size: 12px; font-weight: 700; }
+  .size-card .size-mult { font-size: 10px; opacity: 0.7; }
+  .size-card .size-ex { font-size: 9px; opacity: 0.6; margin-top: 2px; line-height: 1.3; }
+
+  /* ── Price display ── */
+  .price-box {
+    background: linear-gradient(135deg, #1a1a2e, #0f3460);
+    border-radius: 14px; padding: 20px 16px; text-align: center; color: white;
+  }
+  .price-label { font-size: 11px; opacity: 0.7; text-transform: uppercase; letter-spacing: 1px; }
+  .price-value { font-size: 38px; font-weight: 900; color: #2ECC71; line-height: 1.1; margin: 4px 0; }
+  .price-subtitle { font-size: 10px; opacity: 0.6; }
+
+  .breakdown { margin-top: 12px; }
+  .breakdown-row {
+    display: flex; justify-content: space-between;
+    padding: 6px 0; border-bottom: 1px solid #f0f0f0; font-size: 12px;
+  }
+  .breakdown-row:last-child { border-bottom: none; font-weight: 700; }
+  .breakdown-row .val { color: #1a1a2e; font-weight: 600; }
+
+  /* ── Algorithm info ── */
+  .algo-info {
+    font-size: 10px; color: #999; line-height: 1.5; margin-top: 10px;
+    padding: 10px 12px; background: #f8f9fa; border-radius: 8px;
+  }
+  .algo-info code { background: #eee; padding: 1px 4px; border-radius: 3px; font-size: 10px; }
+
+  /* ── Presets legend ── */
+  .legend-title { font-size: 11px; font-weight: 700; color: #555; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 8px; }
+  .legend-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 6px; cursor: pointer; border-radius: 6px; transition: background .15s;
+  }
+  .legend-item:hover { background: #f5f5f5; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; border: 2px solid rgba(0,0,0,0.15); }
+  .legend-text { font-size: 11px; flex: 1; }
+  .legend-price { font-size: 10px; color: #888; }
+
+  .tip { font-size: 10px; color: #999; text-align: center; padding: 4px 16px; font-style: italic; }
+
+  /* ── Map ── */
+  #map { flex: 1; z-index: 1; }
+
+  /* ── Popup ── */
+  .leaflet-popup-content-wrapper { border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
+  .popup-zona { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+  .popup-city { font-size: 14px; font-weight: 800; margin: 2px 0; }
+  .popup-price { font-size: 12px; color: #555; }
+  .popup-btn {
+    display: block; margin-top: 8px; background: #1a1a2e; color: white;
+    border: none; padding: 7px 12px; border-radius: 8px;
+    cursor: pointer; font-size: 12px; font-weight: 700; width: 100%; text-align: center;
+  }
+  .popup-btn:hover { background: #0f3460; }
+
+  /* ── Click instruction on map ── */
+  .map-instruction {
+    position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+    background: rgba(26,26,46,0.9); color: white;
+    padding: 8px 16px; border-radius: 20px;
+    font-size: 12px; font-weight: 600; z-index: 800;
+    pointer-events: none; opacity: 0.9;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+  }
+
+  /* ── Route line animation ── */
+  @keyframes dash { to { stroke-dashoffset: 0; } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-logo">MAF</div>
+  <div>
+    <div class="header-title">Cotizador de Envíos</div>
+    <div class="header-sub">Mueblería MAF · Lerma, Edo. Méx. · NP300</div>
+  </div>
+</div>
+
+<div class="main">
+  <div class="sidebar">
+
+    <!-- ── Búsqueda ── -->
+    <div class="sidebar-section">
+      <label>📍 Destino de entrega</label>
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="text" class="search-input" id="searchInput"
+          placeholder="Busca ciudad, colonia o dirección..."
+          autocomplete="off">
+        <div class="search-results" id="searchResults"></div>
+      </div>
+
+      <div class="quick-zones" id="quickZones">
+        <div class="quick-zone" data-lat="19.282" data-lng="-99.665" data-name="Toluca">Toluca</div>
+        <div class="quick-zone" data-lat="19.355" data-lng="-99.349" data-name="Huixquilucan">Huixquilucan</div>
+        <div class="quick-zone" data-lat="19.540" data-lng="-99.195" data-name="Tlalnepantla">Tlalnepantla</div>
+        <div class="quick-zone" data-lat="19.430" data-lng="-99.147" data-name="CDMX Centro">CDMX Centro</div>
+        <div class="quick-zone" data-lat="19.607" data-lng="-99.055" data-name="Ecatepec">Ecatepec</div>
+        <div class="quick-zone" data-lat="19.042" data-lng="-98.198" data-name="Puebla">Puebla</div>
+        <div class="quick-zone" data-lat="20.588" data-lng="-100.389" data-name="Querétaro">Querétaro</div>
+        <div class="quick-zone" data-lat="20.674" data-lng="-103.338" data-name="Guadalajara">Guadalajara</div>
+        <div class="quick-zone" data-lat="25.686" data-lng="-100.316" data-name="Monterrey">Monterrey</div>
+      </div>
+
+      <div class="dest-card" id="destCard">
+        <div class="dest-name" id="destName">—</div>
+        <div class="dest-meta">
+          <span>📏 <span id="destKm">0</span> km</span>
+          <span>⏱ ~<span id="destTime">0</span></span>
+          <span id="destBanda"></span>
+        </div>
+      </div>
+
+      <p class="tip" style="margin-top:8px">También da clic en cualquier punto del mapa</p>
+    </div>
+
+    <!-- ── Tamaño ── -->
+    <div class="sidebar-section">
+      <label>📦 Tamaño del mueble</label>
+      <div class="size-grid" id="sizeGrid">
+        <div class="size-card" data-size="Chico" data-mult="0.80" onclick="selectSize(this)">
+          <div class="size-icon">🪑</div>
+          <div class="size-name">Chico</div>
+          <div class="size-mult">×0.80</div>
+          <div class="size-ex">Sillas, bancas, accesorios</div>
+        </div>
+        <div class="size-card selected" data-size="Mediano" data-mult="1.00" onclick="selectSize(this)">
+          <div class="size-icon">🪞</div>
+          <div class="size-name">Mediano</div>
+          <div class="size-mult">×1.00</div>
+          <div class="size-ex">Mesas, libreros, burós</div>
+        </div>
+        <div class="size-card" data-size="Grande" data-mult="1.30" onclick="selectSize(this)">
+          <div class="size-icon">🛋️</div>
+          <div class="size-name">Grande</div>
+          <div class="size-mult">×1.30</div>
+          <div class="size-ex">Sofás, camas, comedores</div>
+        </div>
+        <div class="size-card" data-size="Extra Grande" data-mult="1.60" onclick="selectSize(this)">
+          <div class="size-icon">🛏️</div>
+          <div class="size-name">Extra Grande</div>
+          <div class="size-mult">×1.60</div>
+          <div class="size-ex">Recámaras, juegos completos</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Precio ── -->
+    <div class="sidebar-section" id="priceSection" style="display:none">
+      <div class="price-box">
+        <div class="price-label">Precio de envío</div>
+        <div class="price-value" id="precioDisplay">—</div>
+        <div class="price-subtitle">IVA incluido · Carga y descarga</div>
+      </div>
+      <div class="breakdown">
+        <div class="breakdown-row"><span>Costo operativo</span><span class="val" id="costoDisplay">—</span></div>
+        <div class="breakdown-row"><span>Viáticos</span><span class="val" id="viaticosDisplay">$0</span></div>
+        <div class="breakdown-row"><span>Margen (50%)</span><span class="val" id="margenDisplay">—</span></div>
+        <div class="breakdown-row"><span>Multiplicador tamaño</span><span class="val" id="multDisplay">×1.00</span></div>
+        <div class="breakdown-row"><span>Precio final</span><span class="val" id="precioFinalDisplay">—</span></div>
+      </div>
+
+      <div class="algo-info">
+        <strong>Fórmula:</strong> Precio = <code>roundUp( costo / (1−0.5) × mult_tamaño , 100 )</code><br>
+        Costo = <code>$200 base + $15/km</code> (≤120km) · <code>+$12/km</code> (120–400km) · <code>+$8/km</code> (400+km)<br>
+        Distancia = Haversine × 1.55 (factor real calibrado con 17 envíos)
+      </div>
+    </div>
+
+    <!-- ── Referencia rápida (generada dinámicamente) ── -->
+    <div class="sidebar-section">
+      <div class="legend-title">Referencia rápida (mediano)</div>
+      <div id="refLegend"></div>
+    </div>
+
+  </div><!-- /sidebar -->
+
+  <!-- ── Map ── -->
+  <div id="map">
+    <div class="map-instruction" id="mapInstruction">Haz clic en cualquier punto del mapa para cotizar</div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// CONFIGURACIÓN Y CONSTANTES
+// ══════════════════════════════════════════════════════════════
+const ORIGIN = { lat: 19.289, lng: -99.510, name: 'Mueblería MAF – Lerma' };
+const MARGIN = 0.50;
+const ROAD_FACTOR = 1.55;  // calibrado con mediana de 17 envíos reales
+
+// Bandas de costo — regresión sobre datos reales MAF (R²=0.73)
+const BAND_1_LIMIT = 120;   // km
+const BAND_2_LIMIT = 400;   // km
+const BAND_1_BASE  = 200;   // $ fijo (regresión: $195 ≈ $200)
+const BAND_1_RATE  = 15;    // $/km (regresión: $15.41 ≈ $15)
+const BAND_2_RATE  = 12;    // $/km excedente (estimado, sin datos >120km)
+const BAND_2_VIAT  = 600;   // $ viáticos
+const BAND_3_RATE  = 8;     // $/km excedente
+const BAND_3_VIAT  = 1200;  // $ viáticos adicionales
+
+// Multiplicadores de tamaño
+const SIZE_MULT = { 'Chico': 0.80, 'Mediano': 1.00, 'Grande': 1.30, 'Extra Grande': 1.60 };
+
+// ══════════════════════════════════════════════════════════════
+// ALGORITMO DE PRICING
+// ══════════════════════════════════════════════════════════════
+
+/** Haversine distance in km */
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+/** Calculate road km from Lerma to (lat, lng) */
+function roadKm(lat, lng) {
+  const straight = haversine(ORIGIN.lat, ORIGIN.lng, lat, lng);
+  return Math.round(straight * ROAD_FACTOR);
+}
+
+/** Calculate operating cost for given road km */
+function calcCost(km) {
+  let cost = BAND_1_BASE + BAND_1_RATE * Math.min(km, BAND_1_LIMIT);
+  let viaticos = 0;
+  let banda = 1;
+
+  if (km > BAND_1_LIMIT) {
+    const excess = Math.min(km - BAND_1_LIMIT, BAND_2_LIMIT - BAND_1_LIMIT);
+    cost += BAND_2_RATE * excess;
+    viaticos += BAND_2_VIAT;
+    banda = 2;
+  }
+  if (km > BAND_2_LIMIT) {
+    cost += BAND_3_RATE * (km - BAND_2_LIMIT);
+    viaticos += BAND_3_VIAT;
+    banda = 3;
+  }
+
+  return { costBase: cost, viaticos, costoTotal: cost + viaticos, banda };
+}
+
+/** Full price calculation */
+function calcPrice(lat, lng, size) {
+  const km = roadKm(lat, lng);
+  const { costBase, viaticos, costoTotal, banda } = calcCost(km);
+  const mult = SIZE_MULT[size] || 1.0;
+  const precioBase = costoTotal / (1 - MARGIN);
+  const precioFinal = Math.ceil(precioBase * mult / 100) * 100; // Round up to nearest 100
+  const costoFinal = Math.round(precioFinal * (1 - MARGIN));
+  const margen = precioFinal - costoFinal;
+
+  return { km, banda, costBase, viaticos, costoTotal, precioFinal, costoFinal, margen, mult };
+}
+
+/** Estimate drive time */
+function estimateTime(km) {
+  if (km <= 50)  return `${Math.round(km * 1.8)} min`;   // city traffic ~33km/h
+  if (km <= 120) return `${(km / 45).toFixed(1)} hrs`;    // mixed ~45km/h
+  if (km <= 400) return `${(km / 70).toFixed(1)} hrs`;    // highway ~70km/h
+  return `${(km / 75).toFixed(1)} hrs`;                    // long highway ~75km/h
+}
+
+// ══════════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════════
+let currentSize = 'Mediano';
+let currentDest = null; // { lat, lng, name }
+let destMarker = null;
+let routeLine = null;
+
+// ══════════════════════════════════════════════════════════════
+// MAP SETUP
+// ══════════════════════════════════════════════════════════════
+const map = L.map('map', { zoomControl: true }).setView([19.40, -99.30], 10);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap', maxZoom: 18
+}).addTo(map);
+
+// Sucursal marker
+const homeIcon = L.divIcon({
+  html: `<div style="width:32px;height:32px;background:#1a1a2e;border:3px solid #F39C12;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 0 0 4px rgba(243,156,18,0.3);">🏠</div>`,
+  iconSize: [32,32], iconAnchor: [16,16], className: ''
+});
+L.marker([ORIGIN.lat, ORIGIN.lng], { icon: homeIcon, zIndexOffset: 1000 })
+  .addTo(map)
+  .bindPopup('<div style="text-align:center"><strong>🏠 Mueblería MAF</strong><br><small>Lerma, Estado de México<br>Origen de todos los envíos</small></div>');
+
+// Reference city markers
+const REF_CITIES = [
+  { name: 'Toluca', lat: 19.282, lng: -99.665, color: '#2ECC71' },
+  { name: 'Metepec', lat: 19.253, lng: -99.604, color: '#2ECC71' },
+  { name: 'Ocoyoacac', lat: 19.272, lng: -99.454, color: '#2ECC71' },
+  { name: 'Huixquilucan', lat: 19.355, lng: -99.349, color: '#F1C40F' },
+  { name: 'Santa Fe', lat: 19.364, lng: -99.270, color: '#F1C40F' },
+  { name: 'Cuajimalpa', lat: 19.360, lng: -99.298, color: '#F1C40F' },
+  { name: 'Naucalpan', lat: 19.475, lng: -99.238, color: '#E67E22' },
+  { name: 'Tlalnepantla', lat: 19.540, lng: -99.195, color: '#E67E22' },
+  { name: 'Atizapán', lat: 19.560, lng: -99.270, color: '#E67E22' },
+  { name: 'Miguel Hidalgo', lat: 19.425, lng: -99.195, color: '#E74C3C' },
+  { name: 'Cuauhtémoc', lat: 19.430, lng: -99.147, color: '#E74C3C' },
+  { name: 'Benito Juárez', lat: 19.380, lng: -99.165, color: '#E74C3C' },
+  { name: 'Álvaro Obregón', lat: 19.362, lng: -99.201, color: '#E74C3C' },
+  { name: 'Azcapotzalco', lat: 19.487, lng: -99.183, color: '#C0392B' },
+  { name: 'G.A. Madero', lat: 19.493, lng: -99.102, color: '#C0392B' },
+  { name: 'Ecatepec', lat: 19.607, lng: -99.055, color: '#C0392B' },
+  { name: 'Iztapalapa', lat: 19.357, lng: -99.073, color: '#C0392B' },
+  { name: 'Nezahualcóyotl', lat: 19.402, lng: -99.017, color: '#7B241C' },
+  { name: 'Texcoco', lat: 19.517, lng: -98.880, color: '#7B241C' },
+  { name: 'Chalco', lat: 19.263, lng: -98.895, color: '#7B241C' },
+];
+
+REF_CITIES.forEach(c => {
+  const icon = L.divIcon({
+    html: `<div style="width:14px;height:14px;background:${c.color};border:2px solid rgba(0,0,0,0.2);border-radius:50%;opacity:0.7;"></div>`,
+    iconSize: [14,14], iconAnchor: [7,7], className: ''
+  });
+  const price = calcPrice(c.lat, c.lng, 'Mediano');
+  L.marker([c.lat, c.lng], { icon })
+    .addTo(map)
+    .bindPopup(`<div>
+      <div class="popup-city">${c.name}</div>
+      <div class="popup-price">~${price.km} km · Mediano: <strong>${fmt(price.precioFinal)}</strong></div>
+      <button class="popup-btn" onclick="selectDestination(${c.lat},${c.lng},'${c.name}')">Cotizar aquí</button>
+    </div>`);
+});
+
+// ── Map click ──
+map.on('click', function(e) {
+  const { lat, lng } = e.latlng;
+  reverseGeocode(lat, lng).then(name => {
+    selectDestination(lat, lng, name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════
+// UI LOGIC
+// ══════════════════════════════════════════════════════════════
+
+function fmt(n) { return '$' + n.toLocaleString('es-MX'); }
+
+function selectDestination(lat, lng, name) {
+  currentDest = { lat, lng, name };
+  document.getElementById('mapInstruction').style.display = 'none';
+
+  // Update dest card
+  const card = document.getElementById('destCard');
+  card.classList.add('visible');
+  document.getElementById('destName').textContent = name;
+
+  updateQuote();
+  updateMapMarker(lat, lng, name);
+  map.closePopup();
+
+  // Clear quick zone active states
+  document.querySelectorAll('.quick-zone').forEach(z => z.classList.remove('active'));
+}
+
+function updateQuote() {
+  if (!currentDest) return;
+  const { lat, lng } = currentDest;
+  const result = calcPrice(lat, lng, currentSize);
+
+  document.getElementById('destKm').textContent = result.km;
+  document.getElementById('destTime').textContent = estimateTime(result.km);
+
+  const bandaEl = document.getElementById('destBanda');
+  const bandaLabels = { 1: 'Banda 1 – Metro', 2: 'Banda 2 – Regional', 3: 'Banda 3 – Nacional' };
+  bandaEl.innerHTML = `<span class="banda-tag banda-${result.banda}">${bandaLabels[result.banda]}</span>`;
+
+  document.getElementById('precioDisplay').textContent = fmt(result.precioFinal);
+  document.getElementById('costoDisplay').textContent = fmt(result.costoFinal);
+  document.getElementById('viaticosDisplay').textContent = fmt(result.viaticos);
+  document.getElementById('margenDisplay').textContent = fmt(result.margen);
+  document.getElementById('multDisplay').textContent = `×${result.mult.toFixed(2)}`;
+  document.getElementById('precioFinalDisplay').textContent = fmt(result.precioFinal);
+
+  document.getElementById('priceSection').style.display = 'block';
+}
+
+function updateMapMarker(lat, lng, name) {
+  // Remove existing
+  if (destMarker) map.removeLayer(destMarker);
+  if (routeLine) map.removeLayer(routeLine);
+
+  // Destination marker
+  const destIcon = L.divIcon({
+    html: `<div style="width:24px;height:24px;background:#E74C3C;border:3px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;font-size:11px;">📍</div>`,
+    iconSize: [24,24], iconAnchor: [12,12], className: ''
+  });
+  destMarker = L.marker([lat, lng], { icon: destIcon, zIndexOffset: 900 }).addTo(map);
+
+  // Route line
+  routeLine = L.polyline(
+    [[ORIGIN.lat, ORIGIN.lng], [lat, lng]],
+    { color: '#1a1a2e', weight: 3, dashArray: '8 6', opacity: 0.6 }
+  ).addTo(map);
+
+  // Fit bounds to show both points
+  const bounds = L.latLngBounds([[ORIGIN.lat, ORIGIN.lng], [lat, lng]]);
+  map.fitBounds(bounds, { padding: [80, 80], maxZoom: 13 });
+}
+
+function selectSize(card) {
+  document.querySelectorAll('.size-card').forEach(c => c.classList.remove('selected'));
+  card.classList.add('selected');
+  currentSize = card.dataset.size;
+  updateQuote();
+}
+
+function selectQuickDest(lat, lng, name) {
+  selectDestination(lat, lng, name);
+}
+
+// ── Quick zone chips ──
+document.querySelectorAll('.quick-zone').forEach(z => {
+  z.addEventListener('click', () => {
+    document.querySelectorAll('.quick-zone').forEach(q => q.classList.remove('active'));
+    z.classList.add('active');
+    selectDestination(
+      parseFloat(z.dataset.lat),
+      parseFloat(z.dataset.lng),
+      z.dataset.name
+    );
+  });
+});
+
+// ══════════════════════════════════════════════════════════════
+// SEARCH / GEOCODING (Nominatim - OpenStreetMap)
+// ══════════════════════════════════════════════════════════════
+
+let searchTimeout = null;
+const searchInput = document.getElementById('searchInput');
+const searchResults = document.getElementById('searchResults');
+
+searchInput.addEventListener('input', () => {
+  clearTimeout(searchTimeout);
+  const q = searchInput.value.trim();
+  if (q.length < 3) { searchResults.classList.remove('visible'); return; }
+  searchTimeout = setTimeout(() => geocodeSearch(q), 400);
+});
+
+searchInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') searchResults.classList.remove('visible');
+});
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.search-wrap')) searchResults.classList.remove('visible');
+});
+
+async function geocodeSearch(query) {
+  searchResults.innerHTML = '<div class="search-spinner">Buscando...</div>';
+  searchResults.classList.add('visible');
+
+  try {
+    // Bias search toward Mexico
+    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query + ', México')}&limit=5&addressdetails=1&accept-language=es`;
+    const resp = await fetch(url, { headers: { 'User-Agent': 'MAF-Cotizador/1.0' } });
+    const data = await resp.json();
+
+    if (!data.length) {
+      searchResults.innerHTML = '<div class="search-spinner">Sin resultados</div>';
+      return;
+    }
+
+    searchResults.innerHTML = data.map(r => {
+      const km = roadKm(parseFloat(r.lat), parseFloat(r.lon));
+      const price = calcPrice(parseFloat(r.lat), parseFloat(r.lon), 'Mediano');
+      return `<div class="search-result-item" onclick="pickSearchResult(${r.lat},${r.lon},'${escHtml(r.display_name.split(',')[0])}')">
+        <div><strong>${r.display_name.split(',')[0]}</strong> · ~${km} km · ${fmt(price.precioFinal)}</div>
+        <div class="search-result-sub">${r.display_name.split(',').slice(1,3).join(',')}</div>
+      </div>`;
+    }).join('');
+
+  } catch (err) {
+    searchResults.innerHTML = '<div class="search-spinner">Error de búsqueda. Intenta de nuevo.</div>';
+  }
+}
+
+function pickSearchResult(lat, lng, name) {
+  searchResults.classList.remove('visible');
+  searchInput.value = name;
+  selectDestination(lat, lng, name);
+}
+
+async function reverseGeocode(lat, lng) {
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=es`;
+    const resp = await fetch(url, { headers: { 'User-Agent': 'MAF-Cotizador/1.0' } });
+    const data = await resp.json();
+    if (data.address) {
+      return data.address.city || data.address.town || data.address.village ||
+             data.address.suburb || data.address.municipality || data.display_name.split(',')[0];
+    }
+  } catch(e) {}
+  return null;
+}
+
+function escHtml(s) { return s.replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
+
+// ── Generar tabla de referencia dinámica ──────────────────────
+const REF_LEGEND_DATA = [
+  { name: 'Toluca', lat: 19.282, lng: -99.665, color: '#2ECC71' },
+  { name: 'Huixquilucan', lat: 19.355, lng: -99.349, color: '#F1C40F' },
+  { name: 'Tlalnepantla', lat: 19.540, lng: -99.195, color: '#E67E22' },
+  { name: 'CDMX Centro', lat: 19.430, lng: -99.147, color: '#E74C3C' },
+  { name: 'Ecatepec', lat: 19.607, lng: -99.055, color: '#C0392B' },
+  { name: 'Puebla', lat: 19.042, lng: -98.198, color: '#7B241C' },
+  { name: 'Querétaro', lat: 20.588, lng: -100.389, color: '#6C3483' },
+  { name: 'Guadalajara', lat: 20.674, lng: -103.338, color: '#2471A3' },
+  { name: 'Monterrey', lat: 25.686, lng: -100.316, color: '#1A5276' },
+];
+const refContainer = document.getElementById('refLegend');
+REF_LEGEND_DATA.forEach(r => {
+  const p = calcPrice(r.lat, r.lng, 'Mediano');
+  const div = document.createElement('div');
+  div.className = 'legend-item';
+  div.onclick = () => selectQuickDest(r.lat, r.lng, r.name);
+  div.innerHTML = `
+    <div class="legend-dot" style="background:${r.color}"></div>
+    <div class="legend-text">${r.name} · ~${p.km} km</div>
+    <div class="legend-price">${fmt(p.precioFinal)}</div>`;
+  refContainer.appendChild(div);
+});
+</script>
+</body>
+</html>
